@@ -118,6 +118,25 @@ func (t *Timeline) setStatus(reservationID string, status ReservationStatus) (In
 	return updated, nil
 }
 
+// VerifyCurrent confirms that reservation is still the unreleased version of
+// record: it must exist, carry the same identity and scheduling generation as
+// the stored interval, and not have been released.
+func (t *Timeline) VerifyCurrent(reservation Interval) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	_, _, current, found := t.findLocked(reservation.ReservationID)
+	if !found {
+		return fmt.Errorf("reservation %s not found", reservation.ReservationID)
+	}
+	if current.Status == Released {
+		return fmt.Errorf("reservation %s is released", reservation.ReservationID)
+	}
+	if current.PassID != reservation.PassID || current.AntennaID != reservation.AntennaID || current.Generation != reservation.Generation {
+		return fmt.Errorf("reservation %s is not the current version", reservation.ReservationID)
+	}
+	return nil
+}
+
 func (t *Timeline) List(antennaID string) []Interval {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

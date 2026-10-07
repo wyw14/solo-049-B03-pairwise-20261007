@@ -47,8 +47,17 @@ func (f *Fleet) Claim(reservation scheduler.Interval) (State, error) {
 	if !found {
 		return State{}, fmt.Errorf("antenna %s not found", reservation.AntennaID)
 	}
+	// Joint check, atomic with the ownership write: the reservation must still
+	// be the timeline's current unreleased version, and its scheduling
+	// generation must not be older than the generation occupying the device.
+	if err := f.timeline.VerifyCurrent(reservation); err != nil {
+		return State{}, err
+	}
 	if state.OwnerPassID != "" && state.OwnerPassID != reservation.PassID {
 		return State{}, fmt.Errorf("antenna %s is owned by pass %s", state.ID, state.OwnerPassID)
+	}
+	if state.OwnerGeneration > reservation.Generation {
+		return State{}, fmt.Errorf("antenna %s is owned by generation %d, reservation generation %d is stale", state.ID, state.OwnerGeneration, reservation.Generation)
 	}
 	state.OwnerPassID = reservation.PassID
 	state.OwnerGeneration = reservation.Generation

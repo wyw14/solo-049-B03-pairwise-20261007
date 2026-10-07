@@ -133,6 +133,19 @@ func (t *Timeline) List(antennaID string) []Interval {
 	return values
 }
 
+// LiveVersion returns the stored interval for reservationID only while it is
+// still the timeline's current unreleased version. A released (or unknown)
+// reservation is stale and must not be allowed to claim a device.
+func (t *Timeline) LiveVersion(reservationID string) (Interval, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	_, _, value, found := t.findLocked(reservationID)
+	if !found || value.Status == Released {
+		return Interval{}, false
+	}
+	return value, true
+}
+
 func (t *Timeline) CurrentOwner(antennaID string, at time.Time) (Interval, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

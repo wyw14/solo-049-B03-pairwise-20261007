@@ -47,8 +47,22 @@ func (f *Fleet) Claim(reservation scheduler.Interval) (State, error) {
 	if !found {
 		return State{}, fmt.Errorf("antenna %s not found", reservation.AntennaID)
 	}
+	// Joint check of schedule generation and device occupancy: the claiming
+	// reservation must still be the timeline's current unreleased version,
+	// and it must not be older than the generation already occupying the
+	// device. A stale reservation must never take the antenna over.
+	current, live := f.timeline.LiveVersion(reservation.ReservationID)
+	if !live {
+		return State{}, fmt.Errorf("reservation %s is released or unknown to the timeline", reservation.ReservationID)
+	}
+	if current.AntennaID != reservation.AntennaID || current.PassID != reservation.PassID || current.Generation != reservation.Generation {
+		return State{}, fmt.Errorf("reservation %s does not match the timeline's current version", reservation.ReservationID)
+	}
 	if state.OwnerPassID != "" && state.OwnerPassID != reservation.PassID {
 		return State{}, fmt.Errorf("antenna %s is owned by pass %s", state.ID, state.OwnerPassID)
+	}
+	if state.OwnerGeneration > reservation.Generation {
+		return State{}, fmt.Errorf("antenna %s owner generation %d supersedes stale reservation generation %d", state.ID, state.OwnerGeneration, reservation.Generation)
 	}
 	state.OwnerPassID = reservation.PassID
 	state.OwnerGeneration = reservation.Generation
